@@ -129,17 +129,13 @@ function App() {
   const [editProduct, setEditProduct] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [cameraOpen, setCameraOpen] = useState(false);
   const [scanSearchOpen, setScanSearchOpen] = useState(false);
   const [scanDialogOpen, setScanDialogOpen] = useState(false);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
+  const photoInputRef = useRef(null);
   const supportsLiveScanner = typeof window !== 'undefined'
     && typeof navigator !== 'undefined'
     && window.isSecureContext
     && Boolean(navigator.mediaDevices?.getUserMedia);
-  const supportsSecureCamera = supportsLiveScanner;
 
   useEffect(() => {
     try {
@@ -156,13 +152,6 @@ function App() {
       setSnackbar({ open: true, message: 'Could not save product database on this device.', severity: 'warning' });
     }
   }, [productDB]);
-
-  useEffect(() => () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-  }, []);
 
   const resetFormState = () => {
     setForm(EMPTY_FORM);
@@ -187,7 +176,7 @@ function App() {
       if (found) {
         prefill = { ...found, quantity: '', expiration: '' };
       } else if (/^\d+$/.test(trimmedSearch)) {
-        prefill.plu = trimmedSearch;
+        prefill.barcode = trimmedSearch;
       } else {
         prefill.name = trimmedSearch;
       }
@@ -207,100 +196,36 @@ function App() {
     setForm((currentForm) => ({ ...currentForm, [name]: value }));
   };
 
-  const stopCameraStream = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  const handleCloseCamera = () => {
-    stopCameraStream();
-    setCameraOpen(false);
-  };
-
-  const handleOpenCamera = async () => {
-    if (!supportsSecureCamera) {
+  const handleOpenCamera = () => {
+    if (!window.isSecureContext) {
       setSnackbar({
         open: true,
-        message: 'Taking photos requires a secure live site. Deploy to GitHub Pages or use HTTPS to enable the camera.',
+        message: 'Taking photos requires the live HTTPS site.',
         severity: 'info',
       });
       return;
     }
 
-    try {
-      const cameraConstraints = [
-        {
-          video: {
-            facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-          audio: false,
-        },
-        {
-          video: true,
-          audio: false,
-        },
-      ];
-
-      let mediaStream = null;
-      for (const constraints of cameraConstraints) {
-        try {
-          mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-          break;
-        } catch {
-          mediaStream = null;
-        }
-      }
-
-      if (!mediaStream) {
-        throw new Error('Camera unavailable');
-      }
-
-      stopCameraStream();
-      streamRef.current = mediaStream;
-      setCameraOpen(true);
-      window.setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-          videoRef.current.play().catch(() => {});
-        }
-      }, 0);
-    } catch {
-      setSnackbar({
-        open: true,
-        message: 'The camera could not be opened on this device.',
-        severity: 'error',
-      });
-      handleCloseCamera();
-    }
+    photoInputRef.current?.click();
   };
 
-  const handleTakePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) {
+  const handlePhotoSelected = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
       return;
     }
 
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const width = video.videoWidth || 1280;
-    const height = video.videoHeight || 720;
-    canvas.width = width;
-    canvas.height = height;
-    const context = canvas.getContext('2d');
-    if (!context) {
-      setSnackbar({ open: true, message: 'Could not capture the photo.', severity: 'error' });
-      return;
-    }
-
-    context.drawImage(video, 0, 0, width, height);
-    setForm((currentForm) => ({ ...currentForm, photo: canvas.toDataURL('image/jpeg', 0.9) }));
-    handleCloseCamera();
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setForm((currentForm) => ({ ...currentForm, photo: reader.result }));
+      }
+    };
+    reader.onerror = () => {
+      setSnackbar({ open: true, message: 'The photo could not be loaded.', severity: 'error' });
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
   };
 
   const openScanner = (target) => {
@@ -482,6 +407,15 @@ function App() {
       </Drawer>
 
       <Box sx={{ p: { xs: 1, sm: 3 }, background: '#181818', minHeight: '100vh' }}>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhotoSelected}
+          style={{ display: 'none' }}
+        />
+
         <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'center' }, mb: 3, gap: 2 }}>
           <Autocomplete
             freeSolo
@@ -823,28 +757,6 @@ function App() {
           </DialogActions>
         </Dialog>
 
-        <Dialog open={cameraOpen} onClose={handleCloseCamera} fullScreen={isMobile} scroll="body" maxWidth="sm" fullWidth>
-          <DialogTitle>Take Product Photo</DialogTitle>
-          <DialogContent sx={{ textAlign: 'center' }}>
-            <Box sx={{ borderRadius: 2, overflow: 'hidden', background: '#111', minHeight: 240 }}>
-              <video
-                ref={videoRef}
-                autoPlay
-                muted
-                playsInline
-                style={{ width: '100%', display: 'block', aspectRatio: '4 / 3', objectFit: 'cover' }}
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              The app asks for the rear camera first when your phone/browser allows it.
-            </Typography>
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseCamera}>Cancel</Button>
-            <Button variant="contained" onClick={handleTakePhoto}>Capture</Button>
-          </DialogActions>
-        </Dialog>
       </Box>
 
       <Snackbar
