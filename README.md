@@ -99,3 +99,5 @@ Set these environment variables in Render:
 - `DATA_DIR=/var/data`
 
 The old GitHub Pages flow is no longer the intended deployment target for this app because the backend must run with the frontend.
+
+If the Render disk is missing or not mounted, the server now falls back to a writable local runtime directory so the app can still boot. In that fallback mode, data is not guaranteed to persist across redeploys or restarts.

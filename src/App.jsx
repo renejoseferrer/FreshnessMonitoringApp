@@ -217,7 +217,7 @@ function App() {
       if (!silent) {
         setSnackbar({
           open: true,
-          message: error.message || 'Could not connect to the shared local server.',
+          message: error.message || 'Could not connect to the shared app server.',
           severity: 'error',
         });
       }
@@ -663,7 +663,7 @@ function App() {
             </Box>
 
             <Alert severity="info" sx={{ mb: 2.2, background: alpha('#38bdf8', 0.12), color: '#d9f4ff', border: '1px solid rgba(56,189,248,0.28)' }}>
-              Local test mode is active. Credentials are loaded from `.env.local` on this machine.
+              Sign in with the developer credentials configured for this deployment. Staff sign in with their own username and the shared staff password.
             </Alert>
 
             <Box sx={{ display: 'grid', gap: 1.6 }}>
@@ -779,8 +779,8 @@ function App() {
               </Box>
               <Typography variant="body2" sx={{ mx: 2.5, mb: 2, color: '#cabfae' }}>
                 {isDeveloper
-                  ? 'Developer can create named staff logins and clear shared data for the local store.'
-                  : 'Staff users share the same inventory and product catalog through the local server.'}
+                  ? 'Developer can create named staff logins and clear shared data for the whole store.'
+                  : 'Staff users share the same inventory and product catalog through this app.'}
               </Typography>
               <Divider />
               <List>
