@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DATA_DIR = path.join(process.cwd(), 'server', 'data');
+const DEFAULT_DATA_DIR = path.join(process.cwd(), 'server', 'data');
+const DATA_DIR = path.resolve(process.env.DATA_DIR || DEFAULT_DATA_DIR);
 const STORE_PATH = path.join(DATA_DIR, 'store.json');
 const SEVEN_DAYS_IN_MS = 7 * 24 * 60 * 60 * 1000;
 

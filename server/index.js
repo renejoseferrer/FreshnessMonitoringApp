@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,8 @@ import { ensureStoreFile, readStore, writeStore } from './store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const frontendDistPath = path.join(__dirname, '..', 'dist');
+const frontendIndexPath = path.join(frontendDistPath, 'index.html');
 
 dotenv.config({ path: path.join(__dirname, '..', '.env.local') });
 
@@ -24,6 +27,7 @@ const app = express();
 
 ensureStoreFile();
 
+app.disable('x-powered-by');
 app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 
@@ -415,7 +419,20 @@ app.delete('/api/admin/operators/:id', authenticate, requireDeveloper, (request,
   response.json({ operators: loggedStore.operators.map(sanitizeOperator) });
 });
 
+if (fs.existsSync(frontendIndexPath)) {
+  app.use(express.static(frontendDistPath));
+
+  app.use((request, response, next) => {
+    if (request.method !== 'GET' || request.path.startsWith('/api/')) {
+      next();
+      return;
+    }
+
+    response.sendFile(frontendIndexPath);
+  });
+}
+
 app.listen(config.port, '0.0.0.0', () => {
-  console.log(`Shared local API running on http://localhost:${config.port}`);
+  console.log(`App server running on http://localhost:${config.port}`);
   console.log(`Developer username: ${config.developerUsername}`);
 });
