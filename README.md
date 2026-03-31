@@ -14,3 +14,40 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+## Local Shared Login Test Mode
+
+This project now includes a local Express API so you can test shared data and username login before deploying anything.
+
+### Start the app locally
+
+Run:
+
+```bash
+npm run dev:shared
+```
+
+This starts:
+
+- the Vite frontend
+- the local API on port `4000`
+
+### Local credentials
+
+Keep your actual credentials in `.env.local`, which is ignored by git.
+
+You can start from `.env.example`, then set your own values for:
+
+- `DEV_USERNAME`
+- `DEV_PASSWORD`
+- `STAFF_PASSWORD`
+
+The developer account can create operator usernames inside the app. Operators sign in with their own username and the shared staff password.
+
+### Local network testing
+
+Because the frontend runs with `--host`, you can also open the Vite URL from another device on the same network and test shared data there.
+
+### Important
+
+This setup is for local testing only. GitHub Pages cannot run the backend in `server/`, so deployment will need a hosted backend later.
