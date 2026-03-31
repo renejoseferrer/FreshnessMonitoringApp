@@ -654,17 +654,10 @@ function App() {
               <Box component="img" src={crestSrc} alt="RJ crest" sx={{ width: 64, height: 64, borderRadius: '50%' }} />
               <Box>
                 <Typography variant="h4" sx={{ color: '#f8f4eb', lineHeight: 1 }}>
-                  Shared Store Login
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#cabfae', mt: 0.6 }}>
-                  Developer can create named usernames. Staff sign in with their username and the same shared password.
+                  ExpiryApp Login
                 </Typography>
               </Box>
             </Box>
-
-            <Alert severity="info" sx={{ mb: 2.2, background: alpha('#38bdf8', 0.12), color: '#d9f4ff', border: '1px solid rgba(56,189,248,0.28)' }}>
-              Sign in with the developer credentials configured for this deployment. Staff sign in with their own username and the shared staff password.
-            </Alert>
 
             <Box sx={{ display: 'grid', gap: 1.6 }}>
               <TextField
