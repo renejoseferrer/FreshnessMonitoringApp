@@ -7,19 +7,33 @@ const TEMP_DATA_DIR = path.join(os.tmpdir(), 'expiration-monitoring-app-data');
 const REQUESTED_DATA_DIR = process.env.DATA_DIR?.trim()
   ? path.resolve(process.env.DATA_DIR)
   : DEFAULT_DATA_DIR;
+const NODE_ENV = (process.env.NODE_ENV || 'development').trim().toLowerCase();
+const ALLOW_EPHEMERAL_STORAGE = process.env.ALLOW_EPHEMERAL_STORAGE === 'true';
 const SEVEN_DAYS_IN_MS = 7 * 24 * 60 * 60 * 1000;
 
 let activeDataDir = '';
 let dataDirWarningShown = false;
 
+const shouldAllowFallbackStorage = () => {
+  if (ALLOW_EPHEMERAL_STORAGE) {
+    return true;
+  }
+
+  if (NODE_ENV === 'production') {
+    return false;
+  }
+
+  return !process.env.DATA_DIR?.trim();
+};
+
 const getCandidateDataDirs = () => {
   const candidates = [REQUESTED_DATA_DIR];
 
-  if (REQUESTED_DATA_DIR !== DEFAULT_DATA_DIR) {
+  if (shouldAllowFallbackStorage() && REQUESTED_DATA_DIR !== DEFAULT_DATA_DIR) {
     candidates.push(DEFAULT_DATA_DIR);
   }
 
-  if (!candidates.includes(TEMP_DATA_DIR)) {
+  if (shouldAllowFallbackStorage() && !candidates.includes(TEMP_DATA_DIR)) {
     candidates.push(TEMP_DATA_DIR);
   }
 
@@ -39,7 +53,7 @@ const getActiveDataDir = () => {
       activeDataDir = candidateDir;
 
       if (candidateDir !== REQUESTED_DATA_DIR && !dataDirWarningShown) {
-        console.warn(`Requested DATA_DIR \"${REQUESTED_DATA_DIR}\" is unavailable. Falling back to \"${candidateDir}\".`);
+        console.warn(`Requested DATA_DIR "${REQUESTED_DATA_DIR}" is unavailable. Falling back to "${candidateDir}".`);
         dataDirWarningShown = true;
       }
 
@@ -49,10 +63,30 @@ const getActiveDataDir = () => {
     }
   }
 
+  if (!shouldAllowFallbackStorage()) {
+    throw new Error(
+      `Storage initialization failed for DATA_DIR "${REQUESTED_DATA_DIR}". `
+      + 'Persistent storage is required in production. '
+      + 'Verify that your Render disk is mounted and DATA_DIR points to it, or set ALLOW_EPHEMERAL_STORAGE=true only for temporary preview environments.'
+    );
+  }
+
   throw lastError || new Error('Could not initialize any writable data directory.');
 };
 
 const getStorePath = () => path.join(getActiveDataDir(), 'store.json');
+
+export const getStorageInfo = () => {
+  const dataDir = getActiveDataDir();
+
+  return {
+    dataDir,
+    storePath: path.join(dataDir, 'store.json'),
+    requestedDataDir: REQUESTED_DATA_DIR,
+    usingFallback: dataDir !== REQUESTED_DATA_DIR,
+    allowEphemeralStorage: shouldAllowFallbackStorage(),
+  };
+};
 
 const pruneActivityLog = (activityLog) => {
   const cutoff = Date.now() - SEVEN_DAYS_IN_MS;

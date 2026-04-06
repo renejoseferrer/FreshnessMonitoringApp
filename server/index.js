@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { ensureStoreFile, readStore, writeStore } from './store.js';
+import { ensureStoreFile, getStorageInfo, readStore, writeStore } from './store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -113,7 +113,16 @@ const requireDeveloper = (request, response, next) => {
 };
 
 app.get('/api/health', (_request, response) => {
-  response.json({ ok: true });
+  const storage = getStorageInfo();
+
+  response.json({
+    ok: true,
+    storage: {
+      dataDir: storage.dataDir,
+      storePath: storage.storePath,
+      usingFallback: storage.usingFallback,
+    },
+  });
 });
 
 app.post('/api/auth/login', async (request, response) => {
@@ -433,6 +442,9 @@ if (fs.existsSync(frontendIndexPath)) {
 }
 
 app.listen(config.port, '0.0.0.0', () => {
+  const storage = getStorageInfo();
   console.log(`App server running on http://localhost:${config.port}`);
   console.log(`Developer username: ${config.developerUsername}`);
+  console.log(`Data directory: ${storage.dataDir}`);
+  console.log(`Store file: ${storage.storePath}`);
 });

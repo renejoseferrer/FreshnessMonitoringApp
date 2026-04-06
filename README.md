@@ -100,4 +100,10 @@ Set these environment variables in Render:
 
 The old GitHub Pages flow is no longer the intended deployment target for this app because the backend must run with the frontend.
 
-If the Render disk is missing or not mounted, the server now falls back to a writable local runtime directory so the app can still boot. In that fallback mode, data is not guaranteed to persist across redeploys or restarts.
+The server now requires the Render disk in production. If `DATA_DIR` is missing or not writable, the app will fail to boot instead of silently falling back to disposable storage.
+
+For temporary preview environments only, you can override that safety check with:
+
+- `ALLOW_EPHEMERAL_STORAGE=true`
+
+That opt-in fallback is not safe for real usage because data is not guaranteed to persist across redeploys or restarts.
