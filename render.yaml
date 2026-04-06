@@ -5,19 +5,15 @@ services:
     plan: starter
     buildCommand: npm ci && npm run build
     startCommand: npm run start
-    healthCheckPath: /api/health
+    healthCheckPath: /health
     envVars:
-      - key: DATA_DIR
-        value: /var/data
-      - key: JWT_SECRET
-        generateValue: true
-      - key: DEV_USERNAME
+      - key: VITE_SUPABASE_URL
         sync: false
-      - key: DEV_PASSWORD
+      - key: VITE_SUPABASE_ANON_KEY
         sync: false
-      - key: STAFF_PASSWORD
-        sync: false
-    disk:
-      name: expiration-monitor-data
-      mountPath: /var/data
-      sizeGB: 1
+      - key: VITE_SUPABASE_PRODUCT_BUCKET
+        value: product-photos
+      - key: VITE_SUPABASE_ADMIN_OPERATORS_FUNCTION
+        value: admin-operators
+      - key: PORT
+        value: 4000

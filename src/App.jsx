@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import Alert from '@mui/material/Alert';
 import AppBar from '@mui/material/AppBar';
@@ -33,24 +33,40 @@ import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import BarcodeScannerComponent from 'react-qr-barcode-scanner';
-import { apiRequest, clearStoredToken, getStoredToken, setStoredToken } from './api';
+import {
+  bootstrapAppData,
+  clearDatabase,
+  clearDashboard,
+  createOperator,
+  deleteDashboardItem,
+  deleteOperator,
+  getSupabaseConfigError,
+  isSupabaseConfigured,
+  listActivityHistory,
+  saveProduct,
+  signIn,
+  signOut,
+  subscribeToAuthChanges,
+  toggleOperatorActive,
+} from './api';
 
 const EMPTY_FORM = {
   name: '',
   plu: '',
   barcode: '',
   photo: '',
+  photoPath: '',
   quantity: '',
   expiration: '',
 };
 
 const EMPTY_LOGIN_FORM = {
-  username: '',
+  email: '',
   password: '',
 };
 
 const EMPTY_OPERATOR_FORM = {
-  username: '',
+  email: '',
   displayName: '',
 };
 
@@ -118,8 +134,8 @@ class ScannerErrorBoundary extends React.Component {
 function App() {
   const isMobile = useMediaQuery('(max-width:600px)');
   const crestSrc = `${import.meta.env.BASE_URL}rj-crest.png`;
-  const tokenRef = useRef(getStoredToken());
   const photoInputRef = useRef(null);
+  const supabaseConfigError = getSupabaseConfigError();
   const supportsLiveScanner = typeof window !== 'undefined'
     && typeof navigator !== 'undefined'
     && window.isSecureContext
@@ -183,6 +199,14 @@ function App() {
     setOperators(Array.isArray(data?.operators) ? data.operators : []);
   };
 
+  const clearAppData = () => {
+    setSession(null);
+    setProducts([]);
+    setProductDB([]);
+    setOperators([]);
+    setActivities([]);
+  };
+
   const resetFormState = () => {
     setForm(EMPTY_FORM);
     setEditProduct(null);
@@ -191,8 +215,10 @@ function App() {
   };
 
   const loadBootstrap = async ({ silent = false } = {}) => {
-    if (!tokenRef.current) {
+    if (!isSupabaseConfigured) {
+      clearAppData();
       setAuthBooting(false);
+      setSyncing(false);
       return;
     }
 
@@ -201,23 +227,20 @@ function App() {
     }
 
     try {
-      const payload = await apiRequest('/api/bootstrap', { token: tokenRef.current });
+      const payload = await bootstrapAppData();
       setSession(payload.session);
       applyBootstrapData(payload.data);
-    } catch (error) {
-      if (error.status === 401) {
-        clearStoredToken();
-        tokenRef.current = '';
-        setSession(null);
-        setProducts([]);
-        setProductDB([]);
-        setOperators([]);
+
+      if (!payload.session) {
+        setActivities([]);
       }
+    } catch (error) {
+      clearAppData();
 
       if (!silent) {
         setSnackbar({
           open: true,
-          message: error.message || 'Could not connect to the shared app server.',
+          message: error.message || 'Could not connect to Supabase.',
           severity: 'error',
         });
       }
@@ -229,6 +252,14 @@ function App() {
     }
   };
 
+  const loadBootstrapEvent = useEffectEvent(async (options) => {
+    await loadBootstrap(options);
+  });
+
+  const clearAppDataEvent = useEffectEvent(() => {
+    clearAppData();
+  });
+
   const loadActivityHistory = async () => {
     if (!isDeveloper) {
       return;
@@ -236,9 +267,7 @@ function App() {
 
     setActivityLoading(true);
     try {
-      const payload = await apiRequest('/api/admin/activity', {
-        token: tokenRef.current,
-      });
+      const payload = await listActivityHistory();
       setActivities(payload.activities || []);
     } catch (error) {
       setSnackbar({ open: true, message: error.message || 'Could not load activity history.', severity: 'error' });
@@ -248,7 +277,27 @@ function App() {
   };
 
   useEffect(() => {
-    void loadBootstrap();
+    if (!isSupabaseConfigured) {
+      setAuthBooting(false);
+      return undefined;
+    }
+
+    void loadBootstrapEvent();
+
+    const unsubscribe = subscribeToAuthChanges((nextSession) => {
+      if (!nextSession) {
+        clearAppDataEvent();
+        setAuthBooting(false);
+        setSyncing(false);
+        return;
+      }
+
+      void loadBootstrapEvent({ silent: true });
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -257,7 +306,7 @@ function App() {
     }
 
     const intervalId = window.setInterval(() => {
-      void loadBootstrap({ silent: true });
+      void loadBootstrapEvent({ silent: true });
     }, 10000);
 
     return () => window.clearInterval(intervalId);
@@ -267,7 +316,7 @@ function App() {
     let prefill = { ...EMPTY_FORM };
 
     if (product) {
-      prefill = { ...product };
+      prefill = { ...EMPTY_FORM, ...product };
     } else if (search.trim()) {
       const trimmedSearch = search.trim();
       const found = productDB.find(
@@ -277,7 +326,7 @@ function App() {
       );
 
       if (found) {
-        prefill = { ...found, quantity: '', expiration: '' };
+        prefill = { ...EMPTY_FORM, ...found, quantity: '', expiration: '' };
       } else if (/^\d+$/.test(trimmedSearch)) {
         prefill.barcode = trimmedSearch;
       } else {
@@ -321,7 +370,7 @@ function App() {
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        setForm((currentForm) => ({ ...currentForm, photo: reader.result }));
+        setForm((currentForm) => ({ ...currentForm, photo: reader.result, photoPath: '' }));
       }
     };
     reader.onerror = () => {
@@ -377,20 +426,19 @@ function App() {
   });
 
   const handleLogin = async () => {
-    if (!loginForm.username.trim() || !loginForm.password) {
-      setSnackbar({ open: true, message: 'Username and password are required.', severity: 'error' });
+    if (!isSupabaseConfigured) {
+      setSnackbar({ open: true, message: supabaseConfigError, severity: 'error' });
+      return;
+    }
+
+    if (!loginForm.email.trim() || !loginForm.password) {
+      setSnackbar({ open: true, message: 'Email and password are required.', severity: 'error' });
       return;
     }
 
     setAuthSubmitting(true);
     try {
-      const payload = await apiRequest('/api/auth/login', {
-        method: 'POST',
-        body: loginForm,
-      });
-
-      setStoredToken(payload.token);
-      tokenRef.current = payload.token;
+      const payload = await signIn(loginForm);
       setSession(payload.session);
       applyBootstrapData(payload.data);
       setLoginForm(EMPTY_LOGIN_FORM);
@@ -403,14 +451,16 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
-    clearStoredToken();
-    tokenRef.current = '';
-    setSession(null);
-    setProducts([]);
-    setProductDB([]);
-    setOperators([]);
-    setActivities([]);
+  const handleLogout = async () => {
+    try {
+      if (isSupabaseConfigured) {
+        await signOut();
+      }
+    } catch (error) {
+      setSnackbar({ open: true, message: error.message || 'Could not sign out cleanly.', severity: 'error' });
+    }
+
+    clearAppData();
     setDrawerOpen(false);
     setOperatorDialogOpen(false);
     setActivityDialogOpen(false);
@@ -441,17 +491,13 @@ function App() {
     }
 
     try {
-      const payload = await apiRequest('/api/dashboard/save', {
-        method: 'POST',
-        token: tokenRef.current,
-        body: {
-          form: {
-            ...form,
-            name: trimmedName,
-            photo: photoToSave,
-          },
-          editProductId: editProduct?.id || null,
+      const payload = await saveProduct({
+        form: {
+          ...form,
+          name: trimmedName,
+          photo: photoToSave,
         },
+        editProductId: editProduct?.id || null,
       });
 
       setProducts(payload.dashboard || []);
@@ -469,10 +515,7 @@ function App() {
 
   const performDeleteProduct = async (product) => {
     try {
-      const payload = await apiRequest(`/api/dashboard/${product.id}`, {
-        method: 'DELETE',
-        token: tokenRef.current,
-      });
+      const payload = await deleteDashboardItem(product.id);
       setProducts(payload.dashboard || []);
       setProductDB(payload.productDB || []);
       if (isDeveloper && activityDialogOpen) {
@@ -483,6 +526,24 @@ function App() {
     } catch (error) {
       setSnackbar({ open: true, message: error.message || 'Could not delete the product.', severity: 'error' });
     }
+  };
+
+  const getProductStatus = (product) => {
+    if (!product.expiration) {
+      return { accent: '#5b5246', label: 'No date', helper: 'Needs expiration date', tone: '#cdbda4' };
+    }
+
+    const today = dayjs().startOf('day');
+    const expirationDate = dayjs(product.expiration);
+    const dayDifference = expirationDate.diff(today, 'day');
+
+    if (dayDifference < 0) {
+      return { accent: '#ef4444', label: 'Expired', helper: 'REMOVE FROM SHELF', tone: '#fecaca' };
+    }
+    if (dayDifference <= 1) {
+      return { accent: '#f59e0b', label: 'Urgent', helper: 'MARKDOWN SOON', tone: '#fde68a' };
+    }
+    return { accent: '#22c55e', label: 'Fresh', helper: 'SAFE', tone: '#bbf7d0' };
   };
 
   const handleDeleteProduct = async (product) => {
@@ -502,10 +563,7 @@ function App() {
     }
 
     try {
-      const payload = await apiRequest('/api/dashboard/clear', {
-        method: 'POST',
-        token: tokenRef.current,
-      });
+      const payload = await clearDashboard();
       setProducts(payload.dashboard || []);
       setProductDB(payload.productDB || []);
       if (isDeveloper && activityDialogOpen) {
@@ -523,10 +581,7 @@ function App() {
     }
 
     try {
-      const payload = await apiRequest('/api/database/clear', {
-        method: 'POST',
-        token: tokenRef.current,
-      });
+      const payload = await clearDatabase();
       setProducts(payload.dashboard || []);
       setProductDB(payload.productDB || []);
       if (isDeveloper && activityDialogOpen) {
@@ -539,18 +594,14 @@ function App() {
   };
 
   const handleCreateOperator = async () => {
-    if (!operatorForm.username.trim()) {
-      setSnackbar({ open: true, message: 'Operator username is required.', severity: 'error' });
+    if (!operatorForm.email.trim()) {
+      setSnackbar({ open: true, message: 'Operator email is required.', severity: 'error' });
       return;
     }
 
     setOperatorSaving(true);
     try {
-      const payload = await apiRequest('/api/admin/operators', {
-        method: 'POST',
-        token: tokenRef.current,
-        body: operatorForm,
-      });
+      const payload = await createOperator(operatorForm);
       setOperators(payload.operators || []);
       if (activityDialogOpen) {
         void loadActivityHistory();
@@ -566,13 +617,7 @@ function App() {
 
   const handleToggleOperator = async (operator) => {
     try {
-      const payload = await apiRequest(`/api/admin/operators/${operator.id}`, {
-        method: 'PUT',
-        token: tokenRef.current,
-        body: {
-          active: !operator.active,
-        },
-      });
+      const payload = await toggleOperatorActive(operator.id, !operator.active);
       setOperators(payload.operators || []);
       if (activityDialogOpen) {
         void loadActivityHistory();
@@ -584,15 +629,12 @@ function App() {
   };
 
   const handleDeleteOperator = async (operator) => {
-    if (!window.confirm(`Delete the login ${operator.username}?`)) {
+    if (!window.confirm(`Delete the login ${operator.email}?`)) {
       return;
     }
 
     try {
-      const payload = await apiRequest(`/api/admin/operators/${operator.id}`, {
-        method: 'DELETE',
-        token: tokenRef.current,
-      });
+      const payload = await deleteOperator(operator.id);
       setOperators(payload.operators || []);
       if (activityDialogOpen) {
         void loadActivityHistory();
@@ -623,24 +665,6 @@ function App() {
     filteredProducts.sort((leftProduct, rightProduct) => leftProduct.name.localeCompare(rightProduct.name));
   }
 
-  const getProductStatus = (product) => {
-    if (!product.expiration) {
-      return { accent: '#5b5246', label: 'No date', helper: 'Needs expiration date', tone: '#cdbda4' };
-    }
-
-    const today = dayjs().startOf('day');
-    const expirationDate = dayjs(product.expiration);
-    const dayDifference = expirationDate.diff(today, 'day');
-
-    if (dayDifference < 0) {
-      return { accent: '#ef4444', label: 'Expired', helper: 'REMOVE FROM SHELF', tone: '#fecaca' };
-    }
-    if (dayDifference <= 1) {
-      return { accent: '#f59e0b', label: 'Urgent', helper: 'MARKDOWN SOON', tone: '#fde68a' };
-    }
-    return { accent: '#22c55e', label: 'Fresh', helper: 'SAFE', tone: '#bbf7d0' };
-  };
-
   const formatActivityTime = (timestamp) => dayjs(timestamp).format('MMM D, YYYY h:mm A');
 
   return (
@@ -660,10 +684,15 @@ function App() {
             </Box>
 
             <Box sx={{ display: 'grid', gap: 1.6 }}>
+              {!isSupabaseConfigured && (
+                <Alert severity="warning" sx={{ background: alpha('#f59e0b', 0.14), color: '#fde68a', border: '1px solid rgba(245,158,11,0.28)' }}>
+                  {supabaseConfigError}
+                </Alert>
+              )}
               <TextField
-                label="Username"
-                value={loginForm.username}
-                onChange={(event) => setLoginForm((currentForm) => ({ ...currentForm, username: event.target.value }))}
+                label="Email"
+                value={loginForm.email}
+                onChange={(event) => setLoginForm((currentForm) => ({ ...currentForm, email: event.target.value }))}
                 autoFocus
                 fullWidth
                 sx={fieldSx}
@@ -703,7 +732,7 @@ function App() {
               <Button
                 variant="contained"
                 onClick={() => void handleLogin()}
-                disabled={authSubmitting || authBooting}
+                disabled={authSubmitting || authBooting || !isSupabaseConfigured}
                 sx={{ ...actionButtonSx, mt: 0.5, background: 'linear-gradient(90deg, #f97316, #ef4444)', boxShadow: '0 12px 26px rgba(239,68,68,0.24)' }}
               >
                 {authSubmitting || authBooting ? 'Signing in...' : 'Sign In'}
@@ -755,7 +784,7 @@ function App() {
                   }}
                 />
               )}
-              <Button onClick={handleLogout} sx={{ ...actionButtonSx, color: '#f8f4eb' }}>
+              <Button onClick={() => void handleLogout()} sx={{ ...actionButtonSx, color: '#f8f4eb' }}>
                 Log Out
               </Button>
             </Toolbar>
@@ -772,14 +801,14 @@ function App() {
               </Box>
               <Typography variant="body2" sx={{ mx: 2.5, mb: 2, color: '#cabfae' }}>
                 {isDeveloper
-                  ? 'Developer can create named staff logins and clear shared data for the whole store.'
+                  ? 'Developer can create staff accounts and clear shared data for the whole store.'
                   : 'Staff users share the same inventory and product catalog through this app.'}
               </Typography>
               <Divider />
               <List>
                 {isDeveloper && (
                   <ListItem button onClick={() => { setOperatorDialogOpen(true); setDrawerOpen(false); }} sx={{ py: 1.5 }}>
-                    <ListItemText primary="Manage Logins" secondary="Create or disable named operator usernames" />
+                    <ListItemText primary="Manage Logins" secondary="Create or disable named operator accounts" />
                   </ListItem>
                 )}
                 {isDeveloper && (
@@ -797,7 +826,7 @@ function App() {
                     <ListItemText primary="Clear Product Database" secondary="Removes the master product catalog too" />
                   </ListItem>
                 )}
-                <ListItem button onClick={handleLogout} sx={{ py: 1.5 }}>
+                <ListItem button onClick={() => void handleLogout()} sx={{ py: 1.5 }}>
                   <ListItemText primary="Log Out" secondary="Ends this device session" />
                 </ListItem>
               </List>
@@ -891,7 +920,7 @@ function App() {
                     {form.photo && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <img src={form.photo} alt="Preview" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 12, border: '1.5px solid #f97316' }} />
-                        <Button size="small" color="error" onClick={() => setForm((currentForm) => ({ ...currentForm, photo: '' }))} sx={{ borderRadius: 999 }}>
+                        <Button size="small" color="error" onClick={() => setForm((currentForm) => ({ ...currentForm, photo: '', photoPath: '' }))} sx={{ borderRadius: 999 }}>
                           Remove
                         </Button>
                       </Box>
@@ -1020,10 +1049,10 @@ function App() {
               </DialogTitle>
               <DialogContent sx={{ display: 'grid', gap: 1.5, pt: '10px !important' }}>
                 <Alert severity="info" sx={{ background: alpha('#38bdf8', 0.12), color: '#d9f4ff', border: '1px solid rgba(56,189,248,0.28)' }}>
-                  Staff use their own username plus the same shared password as the developer login.
+                  New staff accounts automatically use the shared password configured on the server. Disabled accounts cannot sign back in until they are re-enabled.
                 </Alert>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr auto' }, gap: 1.2, alignItems: 'start' }}>
-                  <TextField label="Username" value={operatorForm.username} onChange={(event) => setOperatorForm((currentForm) => ({ ...currentForm, username: event.target.value }))} fullWidth sx={fieldSx} />
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1fr 1fr auto' }, gap: 1.2, alignItems: 'start' }}>
+                  <TextField label="Email" value={operatorForm.email} onChange={(event) => setOperatorForm((currentForm) => ({ ...currentForm, email: event.target.value }))} fullWidth sx={fieldSx} />
                   <TextField label="Display Name" value={operatorForm.displayName} onChange={(event) => setOperatorForm((currentForm) => ({ ...currentForm, displayName: event.target.value }))} fullWidth sx={fieldSx} />
                   <Button variant="contained" onClick={() => void handleCreateOperator()} disabled={operatorSaving} sx={{ ...actionButtonSx, minHeight: 56, background: 'linear-gradient(90deg, #f97316, #ef4444)' }}>
                     Add Login
@@ -1038,10 +1067,10 @@ function App() {
                       <Box key={operator.id} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1fr) auto' }, gap: 1.2, p: 1.4, borderRadius: 3, border: '1px solid rgba(244,228,195,0.08)', background: 'rgba(248,244,235,0.03)' }}>
                         <Box sx={{ minWidth: 0 }}>
                           <Typography sx={{ fontWeight: 800, color: '#f8f4eb' }}>
-                            {operator.displayName || operator.username}
+                            {operator.displayName || operator.email}
                           </Typography>
                           <Typography variant="body2" sx={{ color: '#cabfae' }}>
-                            Username: {operator.username}
+                            Email: {operator.email}
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: { xs: 'flex-start', sm: 'flex-end' } }}>

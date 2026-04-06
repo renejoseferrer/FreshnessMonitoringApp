@@ -1,49 +1,80 @@
-# React + Vite
+# Expiration Monitoring App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This app now runs as a React frontend backed by Supabase Auth, Postgres, Storage, and an Edge Function for operator account management.
 
-Currently, two official plugins are available:
+The old JSON-file backend is no longer the primary data path. The Node server in [server/index.js](server/index.js) now only serves the built frontend for simple hosting.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What moved to Supabase
 
-## React Compiler
+- Auth: developer and operator sign-in now use Supabase Auth email/password accounts.
+- Database: dashboard items, product catalog, profiles, and activity history now live in Supabase Postgres.
+- Storage: product photos upload to a public Supabase Storage bucket.
+- Admin actions: creating, disabling, and deleting operator auth users now run through a Supabase Edge Function.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local setup
 
-## Expanding the ESLint configuration
+1. Install dependencies.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm install
+```
 
-## Single-Service Deployment
+2. Create a Supabase project.
 
-This app is now set up to run the React frontend and the Express API together in one Node service.
+3. Run the SQL migration in [supabase/migrations/20260405_initial_supabase.sql](supabase/migrations/20260405_initial_supabase.sql).
 
-Recommended host: Render.
+4. Decide whether you want to use the default Edge Function admin key or a custom secret key.
 
-The production deployment flow is:
+Hosted Supabase Edge Functions already expose `SUPABASE_SERVICE_ROLE_KEY` by default. That means you can deploy this app without adding any extra admin secret first.
 
-- Render builds the frontend with `npm run build`
-- the Express server in `server/index.js` serves the built `dist/` files
-- API routes continue to run from the same service under `/api`
-- shared data is stored in `store.json` on a persistent disk mounted by the host
+Only add a custom secret if you specifically want this function to use a newer `sb_secret_...` key instead of the built-in default.
 
-### Start the app locally
+```bash
+supabase secrets set SUPABASE_SECRET_KEY=your-supabase-secret-key
+```
 
-Run:
+If your project still uses the older naming, `SUPABASE_SERVICE_ROLE_KEY` also works. Newer Supabase projects often show this as a secret key that starts with `sb_secret_`.
+
+Set the shared password used for newly created operator accounts in the Edge Function secret store:
+
+```bash
+supabase secrets set OPERATOR_SHARED_PASSWORD=your-shared-staff-password
+```
+
+5. Deploy the operator admin function.
+
+```bash
+supabase functions deploy admin-operators --no-verify-jwt
+```
+
+6. Copy [.env.example](.env.example) to `.env.local` and fill in the Supabase values.
+
+Required variables:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PRODUCT_BUCKET`
+- `VITE_SUPABASE_ADMIN_OPERATORS_FUNCTION`
+
+Do not put your `sb_secret_...` admin key in `.env.local` or any `VITE_*` variable. That key is only for the Edge Function secret store.
+
+7. Create the first developer user in Supabase Auth.
+
+Use the Supabase dashboard or CLI to create the user, then promote that profile in SQL:
+
+```sql
+update public.profiles
+set role = 'developer', display_name = 'Developer'
+where email = 'your-developer-email@example.com';
+```
+
+8. Start the frontend.
 
 ```bash
 npm run dev:shared
 ```
 
-This starts:
-
-- the Vite frontend
-- the local API on port `4000`
-
-### Start the production-style server locally
-
-Run:
+## Production build
 
 ```bash
 npm run build
@@ -52,28 +83,39 @@ npm run start
 
 Then open `http://localhost:4000`.
 
+## Hosting
+
+This repo still includes [render.yaml](render.yaml). It now builds the frontend, injects the `VITE_*` variables at build time, and uses the lightweight Node server to serve the generated `dist/` directory.
+
+You can also host the built frontend on any static host that supports build-time environment variables.
+
+## Supabase notes
+
+- The SQL migration creates a public storage bucket called `product-photos`.
+- Product photos are uploaded from the browser, so the bucket policies must remain in place.
+- Activity history shows the last 7 days.
+- Operator creation, disable/enable, and deletion require the deployed `admin-operators` Edge Function.
+- Newly created operator accounts use the `OPERATOR_SHARED_PASSWORD` Edge Function secret automatically.
+- The `admin-operators` function verifies the developer session itself, so deploy it with `--no-verify-jwt`.
+- The Edge Function accepts either `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY`.
+
+## Development notes
+
+- `npm run dev:shared` now runs Vite with `--host` for device testing on the local network.
+- `npm run start` only serves the built frontend. It does not run a custom application API anymore.
+
 ### Local credentials
 
 Keep your actual credentials in `.env.local`, which is ignored by git.
 
 You can start from `.env.example`, then set your own values for:
 
-- `DEV_USERNAME`
-- `DEV_PASSWORD`
-- `STAFF_PASSWORD`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PRODUCT_BUCKET`
+- `VITE_SUPABASE_ADMIN_OPERATORS_FUNCTION`
 
-The developer account can create operator usernames inside the app. Operators sign in with their own username and the shared staff password.
-
-### Storage used by the hosted backend
-
-For the one-platform deployment, the backend keeps using the current JSON store, but it writes it to a persistent disk instead of your local workspace.
-
-- local development storage: `server/data/store.json`
-- hosted storage: `store.json` on the platform disk mounted through `DATA_DIR`
-
-This is the quickest way to get both frontend and backend live on one platform with the current code.
-
-For a higher-reliability production setup later, move the data layer to Postgres.
+The developer account signs in with a Supabase Auth email/password account. Operator accounts are also Supabase Auth users, and new operators automatically receive the shared password configured in the `OPERATOR_SHARED_PASSWORD` Edge Function secret.
 
 ### Local network testing
 
@@ -87,23 +129,22 @@ Render should be configured with:
 
 - build command: `npm ci && npm run build`
 - start command: `npm run start`
-- health check path: `/api/health`
-- persistent disk mounted at `/var/data`
+- health check path: `/health`
 
 Set these environment variables in Render:
 
-- `DEV_USERNAME`
-- `DEV_PASSWORD`
-- `STAFF_PASSWORD`
-- `JWT_SECRET`
-- `DATA_DIR=/var/data`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PRODUCT_BUCKET=product-photos`
+- `VITE_SUPABASE_ADMIN_OPERATORS_FUNCTION=admin-operators`
+- `PORT=4000`
 
-The old GitHub Pages flow is no longer the intended deployment target for this app because the backend must run with the frontend.
+Render is only hosting the app shell. Auth, database, storage, and operator management all run through Supabase.
 
-The server now requires the Render disk in production. If `DATA_DIR` is missing or not writable, the app will fail to boot instead of silently falling back to disposable storage.
+Do not set the old local-backend variables like `DEV_USERNAME`, `DEV_PASSWORD`, `STAFF_PASSWORD`, `JWT_SECRET`, or `DATA_DIR` for this Supabase deployment.
 
-For temporary preview environments only, you can override that safety check with:
+The old GitHub Pages flow is not the intended default anymore, but any static host that can inject the `VITE_*` values at build time will also work.
 
-- `ALLOW_EPHEMERAL_STORAGE=true`
+- Render will give you a public URL after the first successful deploy.
 
-That opt-in fallback is not safe for real usage because data is not guaranteed to persist across redeploys or restarts.
+Because the data now lives in Supabase, Render restarts do not wipe your expiration data.
