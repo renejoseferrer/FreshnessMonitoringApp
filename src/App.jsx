@@ -166,6 +166,7 @@ function App() {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [scanSearchOpen, setScanSearchOpen] = useState(false);
   const [scanDialogOpen, setScanDialogOpen] = useState(false);
+  const [imageViewer, setImageViewer] = useState({ open: false, src: '', alt: '' });
 
   const isDeveloper = session?.role === 'developer';
 
@@ -211,6 +212,14 @@ function App() {
     setEditProduct(null);
     setFormVisible(false);
     setScanDialogOpen(false);
+  };
+
+  const openImageViewer = (src, alt) => {
+    if (!src) {
+      return;
+    }
+
+    setImageViewer({ open: true, src, alt: alt || 'Product photo' });
   };
 
   const loadBootstrap = async ({ silent = false } = {}) => {
@@ -414,7 +423,7 @@ function App() {
   const compressPhoto = async (dataUrl) => new Promise((resolve) => {
     const image = new window.Image();
     image.onload = () => {
-      const maxDimension = 320;
+      const maxDimension = 1080;
       const scale = Math.min(maxDimension / image.width, maxDimension / image.height, 1);
       const targetWidth = Math.max(Math.round(image.width * scale), 1);
       const targetHeight = Math.max(Math.round(image.height * scale), 1);
@@ -430,7 +439,7 @@ function App() {
       context.imageSmoothingEnabled = true;
       context.imageSmoothingQuality = 'high';
       context.drawImage(image, 0, 0, targetWidth, targetHeight);
-      resolve(canvas.toDataURL('image/jpeg', 0.82));
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
     };
     image.src = dataUrl;
   });
@@ -929,7 +938,7 @@ function App() {
                     </Button>
                     {form.photo && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <img src={form.photo} alt="Preview" style={{ width: 112, height: 112, objectFit: 'cover', borderRadius: 12, border: '1.5px solid #f97316' }} />
+                        <img src={form.photo} alt="Preview" onClick={() => openImageViewer(form.photo, `${form.name || 'Product'} preview`)} style={{ width: 132, height: 132, objectFit: 'cover', borderRadius: 12, border: '1.5px solid #f97316', cursor: 'zoom-in' }} />
                         <Button size="small" color="error" onClick={() => setForm((currentForm) => ({ ...currentForm, photo: '', photoPath: '' }))} sx={{ borderRadius: 999 }}>
                           Remove
                         </Button>
@@ -980,10 +989,10 @@ function App() {
                   const status = getProductStatus(product);
 
                   return (
-                    <Box key={product.id} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: product.photo ? '148px minmax(0, 1fr) auto' : 'minmax(0, 1fr) auto' }, alignItems: 'stretch', background: `linear-gradient(180deg, ${alpha(status.accent, 0.3)}, rgba(10,10,11,0.94))`, borderRadius: '10px', p: { xs: 1.8, sm: 2.1 }, border: `1px solid ${alpha(status.accent, 0.34)}`, boxShadow: `0 18px 42px ${alpha(status.accent, 0.14)}`, columnGap: 1.5, rowGap: 1.2, position: 'relative', overflow: 'hidden', '&::before': { content: '""', position: 'absolute', inset: '0 auto 0 0', width: 7, background: status.accent } }}>
+                    <Box key={product.id} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: product.photo ? '168px minmax(0, 1fr) auto' : 'minmax(0, 1fr) auto' }, alignItems: 'stretch', background: `linear-gradient(180deg, ${alpha(status.accent, 0.3)}, rgba(10,10,11,0.94))`, borderRadius: '10px', p: { xs: 1.8, sm: 2.1 }, border: `1px solid ${alpha(status.accent, 0.34)}`, boxShadow: `0 18px 42px ${alpha(status.accent, 0.14)}`, columnGap: 1.5, rowGap: 1.2, position: 'relative', overflow: 'hidden', '&::before': { content: '""', position: 'absolute', inset: '0 auto 0 0', width: 7, background: status.accent } }}>
                       {product.photo && (
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <img src={product.photo} alt={product.name} style={{ width: 148, height: 148, objectFit: 'cover', borderRadius: 12, boxShadow: '0 10px 24px rgba(0,0,0,0.25)', border: '1px solid rgba(244,228,195,0.14)' }} />
+                          <img src={product.photo} alt={product.name} onClick={() => openImageViewer(product.photo, product.name)} style={{ width: 168, height: 168, objectFit: 'cover', borderRadius: 12, boxShadow: '0 10px 24px rgba(0,0,0,0.25)', border: '1px solid rgba(244,228,195,0.14)', cursor: 'zoom-in' }} />
                         </Box>
                       )}
                       <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.2 }}>
@@ -1188,6 +1197,35 @@ function App() {
               <DialogActions>
                 <Button onClick={() => setScanDialogOpen(false)}>Cancel</Button>
               </DialogActions>
+            </Dialog>
+
+            <Dialog open={imageViewer.open} onClose={() => setImageViewer({ open: false, src: '', alt: '' })} fullScreen={isMobile} maxWidth="lg" PaperProps={{ sx: { background: '#050505', color: '#f8f4eb', borderRadius: isMobile ? 0 : 4 } }}>
+              <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
+                <Typography variant="h6" sx={{ color: '#f8f4eb' }}>
+                  {imageViewer.alt}
+                </Typography>
+                <Button onClick={() => setImageViewer({ open: false, src: '', alt: '' })} sx={{ color: '#cabfae' }}>
+                  Close
+                </Button>
+              </DialogTitle>
+              <DialogContent sx={{ display: 'grid', placeItems: 'center', p: { xs: 1.5, sm: 2.5 }, background: 'radial-gradient(circle at top, rgba(249,115,22,0.12), transparent 30%), #050505' }}>
+                {imageViewer.src && (
+                  <Box
+                    component="img"
+                    src={imageViewer.src}
+                    alt={imageViewer.alt}
+                    sx={{
+                      width: '100%',
+                      maxWidth: 'min(96vw, 1200px)',
+                      maxHeight: '78vh',
+                      objectFit: 'contain',
+                      borderRadius: 3,
+                      border: '1px solid rgba(244,228,195,0.14)',
+                      boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
+                    }}
+                  />
+                )}
+              </DialogContent>
             </Dialog>
           </Box>
         </>
