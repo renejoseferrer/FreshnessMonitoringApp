@@ -71,7 +71,6 @@ const mapDashboardItem = (row) => ({
   barcode: row.barcode || '',
   photoPath: row.photo_path || '',
   photo: getPhotoUrl(row.photo_path),
-  quantity: String(row.quantity ?? ''),
   expiration: row.expiration || '',
   updatedBy: row.updated_by_name || '',
   updatedAt: row.updated_at || '',
@@ -143,7 +142,7 @@ const requireDeveloperProfile = async (client) => {
 const fetchStoreData = async (client, profile) => {
   const dashboardPromise = client
     .from('dashboard_items')
-    .select('id, name, plu, barcode, photo_path, quantity, expiration, updated_by_name, updated_at')
+    .select('id, name, plu, barcode, photo_path, expiration, updated_by_name, updated_at')
     .order('expiration', { ascending: true })
     .order('updated_at', { ascending: false });
 
@@ -327,17 +326,11 @@ export const saveProduct = async ({ form, editProductId }) => {
   const { user, profile } = await requireActiveProfile(client);
 
   const name = String(form.name || '').trim();
-  const quantityInput = String(form.quantity || '').trim();
-  const quantity = quantityInput ? Number.parseInt(quantityInput, 10) : null;
   const expiration = String(form.expiration || '').trim();
   const nameKey = normalizeNameKey(name);
 
   if (!name || !expiration) {
     throw new Error('Name and expiration are required.');
-  }
-
-  if (quantityInput && (!Number.isInteger(quantity) || quantity < 1)) {
-    throw new Error('Quantity must be a whole number greater than 0.');
   }
 
   const existingCatalogResult = await client
@@ -370,7 +363,7 @@ export const saveProduct = async ({ form, editProductId }) => {
     plu: catalogRecord.plu,
     barcode: catalogRecord.barcode,
     photo_path: catalogRecord.photo_path,
-    quantity,
+    quantity: 1,
     expiration,
     updated_by_user_id: user.id,
     updated_by_name: profile.display_name || profile.email,

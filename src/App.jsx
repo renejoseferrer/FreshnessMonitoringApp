@@ -56,7 +56,6 @@ const EMPTY_FORM = {
   barcode: '',
   photo: '',
   photoPath: '',
-  quantity: '',
   expiration: '',
 };
 
@@ -326,7 +325,7 @@ function App() {
       );
 
       if (found) {
-        prefill = { ...EMPTY_FORM, ...found, quantity: '', expiration: '' };
+        prefill = { ...EMPTY_FORM, ...found, expiration: '' };
       } else if (/^\d+$/.test(trimmedSearch)) {
         prefill.barcode = trimmedSearch;
       } else {
@@ -927,7 +926,6 @@ function App() {
                     )}
                   </Box>
 
-                  <TextField label="Quantity (optional)" name="quantity" type="number" value={form.quantity} onChange={handleFormChange} fullWidth sx={fieldSx} inputProps={{ min: 1 }} />
                   <TextField label="Expiration Date" name="expiration" type="date" value={form.expiration} onChange={handleFormChange} fullWidth InputLabelProps={{ shrink: true }} required sx={fieldSx} onClick={(event) => { if (event.target.showPicker) { event.target.showPicker(); } }} />
 
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.4, mt: 1 }}>
@@ -1008,14 +1006,6 @@ function App() {
                             </Typography>
                             <Typography sx={{ color: '#f8f4eb', fontSize: { xs: 15, sm: 17 }, fontWeight: 700, lineHeight: 1.1, wordBreak: 'break-word' }}>
                               {product.barcode || '-'}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ px: 1.3, py: 1.05, borderRadius: 999, background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                            <Typography sx={{ color: '#cabfae', fontSize: 11, fontWeight: 700, letterSpacing: 0.9, textTransform: 'uppercase', mb: 0.35 }}>
-                              Quantity
-                            </Typography>
-                            <Typography sx={{ color: '#f8f4eb', fontSize: { xs: 17, sm: 19 }, fontWeight: 800, lineHeight: 1.05 }}>
-                              {product.quantity}
                             </Typography>
                           </Box>
                         </Box>
