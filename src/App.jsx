@@ -470,8 +470,8 @@ function App() {
   };
 
   const handleSaveProduct = async () => {
-    if (!form.name.trim() || !form.quantity || !form.expiration) {
-      setSnackbar({ open: true, message: 'Name, quantity, and expiration are required.', severity: 'error' });
+    if (!form.name.trim() || !form.expiration) {
+      setSnackbar({ open: true, message: 'Name and expiration are required.', severity: 'error' });
       return;
     }
 
@@ -927,7 +927,7 @@ function App() {
                     )}
                   </Box>
 
-                  <TextField label="Quantity" name="quantity" type="number" value={form.quantity} onChange={handleFormChange} fullWidth required sx={fieldSx} inputProps={{ min: 1 }} />
+                  <TextField label="Quantity (optional)" name="quantity" type="number" value={form.quantity} onChange={handleFormChange} fullWidth sx={fieldSx} inputProps={{ min: 1 }} />
                   <TextField label="Expiration Date" name="expiration" type="date" value={form.expiration} onChange={handleFormChange} fullWidth InputLabelProps={{ shrink: true }} required sx={fieldSx} onClick={(event) => { if (event.target.showPicker) { event.target.showPicker(); } }} />
 
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.4, mt: 1 }}>
@@ -936,7 +936,7 @@ function App() {
                       onClick={() => void handleSaveProduct()}
                       variant="contained"
                       sx={{ ...actionButtonSx, background: 'linear-gradient(90deg, #f97316, #ef4444)', boxShadow: '0 12px 26px rgba(239,68,68,0.24)' }}
-                      disabled={!form.name.trim() || !form.quantity || !form.expiration || (!editProduct && !productDB.find((product) => product.name.toLowerCase() === form.name.trim().toLowerCase()) && !form.photo)}
+                      disabled={!form.name.trim() || !form.expiration || (!editProduct && !productDB.find((product) => product.name.toLowerCase() === form.name.trim().toLowerCase()) && !form.photo)}
                     >
                       Save to shelf
                     </Button>

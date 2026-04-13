@@ -327,12 +327,17 @@ export const saveProduct = async ({ form, editProductId }) => {
   const { user, profile } = await requireActiveProfile(client);
 
   const name = String(form.name || '').trim();
-  const quantity = Number.parseInt(String(form.quantity || ''), 10);
+  const quantityInput = String(form.quantity || '').trim();
+  const quantity = quantityInput ? Number.parseInt(quantityInput, 10) : null;
   const expiration = String(form.expiration || '').trim();
   const nameKey = normalizeNameKey(name);
 
-  if (!name || !Number.isInteger(quantity) || quantity < 1 || !expiration) {
-    throw new Error('Name, quantity, and expiration are required.');
+  if (!name || !expiration) {
+    throw new Error('Name and expiration are required.');
+  }
+
+  if (quantityInput && (!Number.isInteger(quantity) || quantity < 1)) {
+    throw new Error('Quantity must be a whole number greater than 0.');
   }
 
   const existingCatalogResult = await client
