@@ -414,12 +414,23 @@ function App() {
   const compressPhoto = async (dataUrl) => new Promise((resolve) => {
     const image = new window.Image();
     image.onload = () => {
+      const maxDimension = 320;
+      const scale = Math.min(maxDimension / image.width, maxDimension / image.height, 1);
+      const targetWidth = Math.max(Math.round(image.width * scale), 1);
+      const targetHeight = Math.max(Math.round(image.height * scale), 1);
       const canvas = document.createElement('canvas');
-      canvas.width = 96;
-      canvas.height = 96;
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
       const context = canvas.getContext('2d');
-      context.drawImage(image, 0, 0, 96, 96);
-      resolve(canvas.toDataURL('image/jpeg', 0.65));
+      if (!context) {
+        resolve(dataUrl);
+        return;
+      }
+
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+      context.drawImage(image, 0, 0, targetWidth, targetHeight);
+      resolve(canvas.toDataURL('image/jpeg', 0.82));
     };
     image.src = dataUrl;
   });
@@ -918,7 +929,7 @@ function App() {
                     </Button>
                     {form.photo && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <img src={form.photo} alt="Preview" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 12, border: '1.5px solid #f97316' }} />
+                        <img src={form.photo} alt="Preview" style={{ width: 112, height: 112, objectFit: 'cover', borderRadius: 12, border: '1.5px solid #f97316' }} />
                         <Button size="small" color="error" onClick={() => setForm((currentForm) => ({ ...currentForm, photo: '', photoPath: '' }))} sx={{ borderRadius: 999 }}>
                           Remove
                         </Button>
@@ -969,10 +980,10 @@ function App() {
                   const status = getProductStatus(product);
 
                   return (
-                    <Box key={product.id} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: product.photo ? '112px minmax(0, 1fr) auto' : 'minmax(0, 1fr) auto' }, alignItems: 'stretch', background: `linear-gradient(180deg, ${alpha(status.accent, 0.3)}, rgba(10,10,11,0.94))`, borderRadius: '10px', p: { xs: 1.8, sm: 2.1 }, border: `1px solid ${alpha(status.accent, 0.34)}`, boxShadow: `0 18px 42px ${alpha(status.accent, 0.14)}`, columnGap: 1.5, rowGap: 1.2, position: 'relative', overflow: 'hidden', '&::before': { content: '""', position: 'absolute', inset: '0 auto 0 0', width: 7, background: status.accent } }}>
+                    <Box key={product.id} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: product.photo ? '148px minmax(0, 1fr) auto' : 'minmax(0, 1fr) auto' }, alignItems: 'stretch', background: `linear-gradient(180deg, ${alpha(status.accent, 0.3)}, rgba(10,10,11,0.94))`, borderRadius: '10px', p: { xs: 1.8, sm: 2.1 }, border: `1px solid ${alpha(status.accent, 0.34)}`, boxShadow: `0 18px 42px ${alpha(status.accent, 0.14)}`, columnGap: 1.5, rowGap: 1.2, position: 'relative', overflow: 'hidden', '&::before': { content: '""', position: 'absolute', inset: '0 auto 0 0', width: 7, background: status.accent } }}>
                       {product.photo && (
                         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <img src={product.photo} alt={product.name} style={{ width: 112, height: 112, objectFit: 'cover', borderRadius: 8, boxShadow: '0 10px 24px rgba(0,0,0,0.25)', border: '1px solid rgba(244,228,195,0.14)' }} />
+                          <img src={product.photo} alt={product.name} style={{ width: 148, height: 148, objectFit: 'cover', borderRadius: 12, boxShadow: '0 10px 24px rgba(0,0,0,0.25)', border: '1px solid rgba(244,228,195,0.14)' }} />
                         </Box>
                       )}
                       <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.2 }}>
