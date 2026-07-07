@@ -33,6 +33,7 @@ import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import BarcodeScannerComponent from 'react-qr-barcode-scanner';
+import JsBarcode from 'jsbarcode';
 import {
   bootstrapAppData,
   clearDatabase,
@@ -104,6 +105,47 @@ const darkTheme = createTheme({
     borderRadius: 18,
   },
 });
+
+function BarcodePreview({ value }) {
+  const svgRef = useRef(null);
+
+  useEffect(() => {
+    if (!svgRef.current || !value) {
+      return;
+    }
+
+    const normalizedValue = String(value).trim();
+    svgRef.current.innerHTML = '';
+
+    try {
+      JsBarcode(svgRef.current, normalizedValue, {
+        format: 'CODE128',
+        displayValue: true,
+        width: 1.8,
+        height: 56,
+        margin: 6,
+        fontSize: 12,
+        textMargin: 4,
+        background: '#ffffff',
+        lineColor: '#111111',
+      });
+    } catch (error) {
+      if (svgRef.current) {
+        svgRef.current.innerHTML = '';
+      }
+    }
+  }, [value]);
+
+  if (!value) {
+    return null;
+  }
+
+  return (
+    <Box sx={{ mt: 0.8, p: 1, borderRadius: 2.2, background: 'rgba(255,255,255,0.96)', border: '1px solid rgba(17,17,17,0.08)' }}>
+      <svg ref={svgRef} aria-label={`Barcode for ${value}`} style={{ width: '100%', height: 'auto', display: 'block' }} />
+    </Box>
+  );
+}
 
 class ScannerErrorBoundary extends React.Component {
   constructor(props) {
@@ -320,13 +362,14 @@ function App() {
     return () => window.clearInterval(intervalId);
   }, [session]);
 
-  const handleDialogOpen = (product = null) => {
+  const handleDialogOpen = (product = null, scanText = '') => {
     let prefill = { ...EMPTY_FORM };
+    const activeSearch = scanText.trim() || search.trim();
 
     if (product) {
       prefill = { ...EMPTY_FORM, ...product };
-    } else if (search.trim()) {
-      const trimmedSearch = search.trim();
+    } else if (activeSearch) {
+      const trimmedSearch = activeSearch;
       const found = productDB.find(
         (entry) => entry.name.toLowerCase() === trimmedSearch.toLowerCase()
           || (entry.plu && entry.plu === trimmedSearch)
@@ -408,8 +451,10 @@ function App() {
 
   const handleScanSearch = (_error, result) => {
     if (result?.text) {
-      setSearch(result.text);
+      const scannedText = result.text;
+      setSearch(scannedText);
       setScanSearchOpen(false);
+      void handleDialogOpen(null, scannedText);
     }
   };
 
@@ -1020,13 +1065,14 @@ function App() {
                               {product.expiration}
                             </Typography>
                           </Box>
-                          <Box sx={{ px: 1.3, py: 1.05, borderRadius: 999, background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                          <Box sx={{ px: 1.3, py: 1.05, borderRadius: 3, background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)', gridColumn: { xs: '1 / -1', sm: '1 / -1' } }}>
                             <Typography sx={{ color: '#cabfae', fontSize: 11, fontWeight: 700, letterSpacing: 0.9, textTransform: 'uppercase', mb: 0.35 }}>
                               Barcode
                             </Typography>
                             <Typography sx={{ color: '#f8f4eb', fontSize: { xs: 15, sm: 17 }, fontWeight: 700, lineHeight: 1.1, wordBreak: 'break-word' }}>
                               {product.barcode || '-'}
                             </Typography>
+                            <BarcodePreview value={product.barcode} />
                           </Box>
                         </Box>
 
