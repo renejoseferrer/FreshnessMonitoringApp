@@ -106,7 +106,7 @@ const darkTheme = createTheme({
   },
 });
 
-function BarcodePreview({ value }) {
+function BarcodePreview({ value, onZoom }) {
   const svgRef = useRef(null);
 
   useEffect(() => {
@@ -121,12 +121,12 @@ function BarcodePreview({ value }) {
       JsBarcode(svgRef.current, normalizedValue, {
         format: 'CODE128',
         displayValue: true,
-        width: 1.8,
-        height: 56,
-        margin: 6,
+        width: 3,
+        height: 112,
+        margin: 0,
         fontSize: 12,
-        textMargin: 4,
-        background: '#ffffff',
+        textMargin: 5,
+        background: 'transparent',
         lineColor: '#111111',
       });
     } catch (error) {
@@ -136,13 +136,43 @@ function BarcodePreview({ value }) {
     }
   }, [value]);
 
+  const handleZoom = () => {
+    if (!onZoom || !svgRef.current) {
+      return;
+    }
+
+    const svgMarkup = svgRef.current.outerHTML;
+    const encoded = encodeURIComponent(svgMarkup).replace(/'/g, '%27').replace(/\"/g, '%22');
+    const dataUrl = `data:image/svg+xml;charset=utf-8,${encoded}`;
+    onZoom(dataUrl, `Barcode for ${value}`);
+  };
+
   if (!value) {
     return null;
   }
 
   return (
-    <Box sx={{ mt: 0.8, p: 1, borderRadius: 2.2, background: 'rgba(255,255,255,0.96)', border: '1px solid rgba(17,17,17,0.08)' }}>
-      <svg ref={svgRef} aria-label={`Barcode for ${value}`} style={{ width: '100%', height: 'auto', display: 'block' }} />
+    <Box
+      sx={{
+        mt: 0.8,
+        pt: 0.55,
+        pl: 0.55,
+        pr: 0.55,
+        pb: 0.55,
+        borderRadius: 4,
+        background: 'transparent',
+        border: 'none',
+        cursor: onZoom ? 'zoom-in' : 'default',
+        display: 'flex',
+        justifyContent: 'center',
+      }}
+      onClick={handleZoom}
+    >
+      <svg
+        ref={svgRef}
+        aria-label={`Barcode for ${value}`}
+        style={{ width: '2.25in', height: '1.6875in', display: 'block', margin: '0 auto' }}
+      />
     </Box>
   );
 }
@@ -983,7 +1013,7 @@ function App() {
                     </Button>
                     {form.photo && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <img src={form.photo} alt="Preview" onClick={() => openImageViewer(form.photo, `${form.name || 'Product'} preview`)} style={{ width: 132, height: 132, objectFit: 'cover', borderRadius: 12, border: '1.5px solid #f97316', cursor: 'zoom-in' }} />
+                        <img src={form.photo} alt="Preview" onClick={() => openImageViewer(form.photo, `${form.name || 'Product'} preview`)} style={{ width: 198, height: 198, objectFit: 'cover', borderRadius: 12, border: '1.5px solid #f97316', cursor: 'zoom-in' }} />
                         <Button size="small" color="error" onClick={() => setForm((currentForm) => ({ ...currentForm, photo: '', photoPath: '' }))} sx={{ borderRadius: 999 }}>
                           Remove
                         </Button>
@@ -1034,12 +1064,7 @@ function App() {
                   const status = getProductStatus(product);
 
                   return (
-                    <Box key={product.id} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: product.photo ? '168px minmax(0, 1fr) auto' : 'minmax(0, 1fr) auto' }, alignItems: 'stretch', background: `linear-gradient(180deg, ${alpha(status.accent, 0.3)}, rgba(10,10,11,0.94))`, borderRadius: '10px', p: { xs: 1.8, sm: 2.1 }, border: `1px solid ${alpha(status.accent, 0.34)}`, boxShadow: `0 18px 42px ${alpha(status.accent, 0.14)}`, columnGap: 1.5, rowGap: 1.2, position: 'relative', overflow: 'hidden', '&::before': { content: '""', position: 'absolute', inset: '0 auto 0 0', width: 7, background: status.accent } }}>
-                      {product.photo && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <img src={product.photo} alt={product.name} onClick={() => openImageViewer(product.photo, product.name)} style={{ width: 168, height: 168, objectFit: 'cover', borderRadius: 12, boxShadow: '0 10px 24px rgba(0,0,0,0.25)', border: '1px solid rgba(244,228,195,0.14)', cursor: 'zoom-in' }} />
-                        </Box>
-                      )}
+                    <Box key={product.id} sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1fr) auto' }, alignItems: 'stretch', background: `linear-gradient(180deg, ${alpha(status.accent, 0.3)}, rgba(10,10,11,0.94))`, borderRadius: '10px', p: { xs: 1.8, sm: 2.1 }, border: `1px solid ${alpha(status.accent, 0.34)}`, boxShadow: `0 18px 42px ${alpha(status.accent, 0.14)}`, columnGap: 1.5, rowGap: 1.2, position: 'relative', overflow: 'hidden', '&::before': { content: '""', position: 'absolute', inset: '0 auto 0 0', width: 7, background: status.accent } }}>
                       <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.2 }}>
                         <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', sm: 'center' }, justifyContent: 'space-between', gap: 0.9, flexDirection: { xs: 'column', sm: 'row' } }}>
                           <Typography variant="h5" sx={{ color: '#f8f4eb', fontSize: { xs: 24, sm: 28 }, fontWeight: 800, lineHeight: 1.05, letterSpacing: 0.1 }}>
@@ -1051,7 +1076,7 @@ function App() {
                         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' }, gap: 1.1 }}>
                           <Box sx={{ px: 1.3, py: 1.05, borderRadius: 999, background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)' }}>
                             <Typography sx={{ color: '#cabfae', fontSize: 11, fontWeight: 700, letterSpacing: 0.9, textTransform: 'uppercase', mb: 0.35 }}>
-                              PLU
+                              PLU/Article Number
                             </Typography>
                             <Typography sx={{ color: '#f8f4eb', fontSize: { xs: 18, sm: 20 }, fontWeight: 800, lineHeight: 1.05 }}>
                               {product.plu || '-'}
@@ -1065,14 +1090,24 @@ function App() {
                               {product.expiration}
                             </Typography>
                           </Box>
-                          <Box sx={{ px: 1.3, py: 1.05, borderRadius: 3, background: 'rgba(0,0,0,0.18)', border: '1px solid rgba(255,255,255,0.08)', gridColumn: { xs: '1 / -1', sm: '1 / -1' } }}>
-                            <Typography sx={{ color: '#cabfae', fontSize: 11, fontWeight: 700, letterSpacing: 0.9, textTransform: 'uppercase', mb: 0.35 }}>
+                          {product.photo && (
+                            <Box sx={{ px: 1.3, py: 1.05, borderRadius: 3, background: 'transparent', border: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                                <img
+                                  src={product.photo}
+                                  alt={product.name}
+                                  onClick={() => openImageViewer(product.photo, product.name)}
+                                  style={{ width: 252, height: 252, objectFit: 'cover', borderRadius: 12, boxShadow: '0 10px 24px rgba(0,0,0,0.25)', border: '1px solid rgba(244,228,195,0.14)', cursor: 'zoom-in' }}
+                                />
+                            </Box>
+                          )}
+                          <Box sx={{ px: 1.75, py: 1.2, borderRadius: 4, background: 'rgba(0,0,0,0.22)', border: '1px solid rgba(255,255,255,0.10)', overflow: 'hidden', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                            <Typography sx={{ color: '#cabfae', fontSize: 11, fontWeight: 700, letterSpacing: 0.9, textTransform: 'uppercase', mb: 0.35, px: 0.15 }}>
                               Barcode
                             </Typography>
-                            <Typography sx={{ color: '#f8f4eb', fontSize: { xs: 15, sm: 17 }, fontWeight: 700, lineHeight: 1.1, wordBreak: 'break-word' }}>
+                            <Typography sx={{ color: '#f8f4eb', fontSize: { xs: 15, sm: 17 }, fontWeight: 700, lineHeight: 1.1, wordBreak: 'break-word', mb: 1, maxWidth: '100%' }}>
                               {product.barcode || '-'}
                             </Typography>
-                            <BarcodePreview value={product.barcode} />
+                            <BarcodePreview value={product.barcode} onZoom={(src, alt) => openImageViewer(src, alt)} />
                           </Box>
                         </Box>
 
