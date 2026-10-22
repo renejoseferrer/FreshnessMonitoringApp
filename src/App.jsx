@@ -30,6 +30,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import MenuIcon from '@mui/icons-material/Menu';
 import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
+import RotateLeftIcon from '@mui/icons-material/RotateLeft';
+import RotateRightIcon from '@mui/icons-material/RotateRight';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import BarcodeScannerComponent from 'react-qr-barcode-scanner';
@@ -126,7 +128,7 @@ function BarcodePreview({ value, onZoom }) {
         margin: 0,
         fontSize: 12,
         textMargin: 5,
-        background: 'transparent',
+        background: '#ffffff',
         lineColor: '#111111',
       });
     } catch (error) {
@@ -144,7 +146,7 @@ function BarcodePreview({ value, onZoom }) {
     const svgMarkup = svgRef.current.outerHTML;
     const encoded = encodeURIComponent(svgMarkup).replace(/'/g, '%27').replace(/\"/g, '%22');
     const dataUrl = `data:image/svg+xml;charset=utf-8,${encoded}`;
-    onZoom(dataUrl, `Barcode for ${value}`);
+    onZoom(dataUrl, `Barcode for ${value}`, { isBarcode: true });
   };
 
   if (!value) {
@@ -159,19 +161,21 @@ function BarcodePreview({ value, onZoom }) {
         pl: 0.55,
         pr: 0.55,
         pb: 0.55,
-        borderRadius: 4,
-        background: 'transparent',
+        borderRadius: 0,
+        background: '#ffffff',
         border: 'none',
         cursor: onZoom ? 'zoom-in' : 'default',
         display: 'flex',
         justifyContent: 'center',
+        maxWidth: '100%',
+        overflow: 'hidden',
       }}
       onClick={handleZoom}
     >
       <svg
         ref={svgRef}
         aria-label={`Barcode for ${value}`}
-        style={{ width: '2.25in', height: '1.6875in', display: 'block', margin: '0 auto' }}
+        style={{ width: '2.25in', maxWidth: '100%', height: '1.6875in', display: 'block', margin: '0 auto' }}
       />
     </Box>
   );
@@ -227,6 +231,7 @@ function App() {
   const [formVisible, setFormVisible] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [photoRotation, setPhotoRotation] = useState(0);
   const [loginForm, setLoginForm] = useState(EMPTY_LOGIN_FORM);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [operatorForm, setOperatorForm] = useState(EMPTY_OPERATOR_FORM);
@@ -239,7 +244,7 @@ function App() {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const [scanSearchOpen, setScanSearchOpen] = useState(false);
   const [scanDialogOpen, setScanDialogOpen] = useState(false);
-  const [imageViewer, setImageViewer] = useState({ open: false, src: '', alt: '' });
+  const [imageViewer, setImageViewer] = useState({ open: false, src: '', alt: '', isBarcode: false, rotation: 0 });
 
   const isDeveloper = session?.role === 'developer';
 
@@ -282,17 +287,18 @@ function App() {
 
   const resetFormState = () => {
     setForm(EMPTY_FORM);
+    setPhotoRotation(0);
     setEditProduct(null);
     setFormVisible(false);
     setScanDialogOpen(false);
   };
 
-  const openImageViewer = (src, alt) => {
+  const openImageViewer = (src, alt, { isBarcode = false, rotation = 0 } = {}) => {
     if (!src) {
       return;
     }
 
-    setImageViewer({ open: true, src, alt: alt || 'Product photo' });
+    setImageViewer({ open: true, src, alt: alt || 'Product photo', isBarcode, rotation });
   };
 
   const loadBootstrap = async ({ silent = false } = {}) => {
@@ -435,6 +441,7 @@ function App() {
 
     setEditProduct(product);
     setForm(prefill);
+    setPhotoRotation(0);
     setFormVisible(true);
   };
 
@@ -470,6 +477,7 @@ function App() {
     reader.onload = () => {
       if (typeof reader.result === 'string') {
         setForm((currentForm) => ({ ...currentForm, photo: reader.result, photoPath: '' }));
+        setPhotoRotation(0);
       }
     };
     reader.onerror = () => {
@@ -513,29 +521,50 @@ function App() {
     }
   };
 
-  const compressPhoto = async (dataUrl) => new Promise((resolve) => {
+  const compressPhoto = async (dataUrl, rotation = 0) => new Promise((resolve, reject) => {
     const image = new window.Image();
     image.onload = () => {
       const maxDimension = 1080;
       const scale = Math.min(maxDimension / image.width, maxDimension / image.height, 1);
       const targetWidth = Math.max(Math.round(image.width * scale), 1);
       const targetHeight = Math.max(Math.round(image.height * scale), 1);
+      const normalizedRotation = ((rotation % 360) + 360) % 360;
+      const isSideways = normalizedRotation === 90 || normalizedRotation === 270;
       const canvas = document.createElement('canvas');
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
+      canvas.width = isSideways ? targetHeight : targetWidth;
+      canvas.height = isSideways ? targetWidth : targetHeight;
       const context = canvas.getContext('2d');
       if (!context) {
-        resolve(dataUrl);
+        reject(new Error('Could not prepare the photo for saving.'));
         return;
       }
 
       context.imageSmoothingEnabled = true;
       context.imageSmoothingQuality = 'high';
-      context.drawImage(image, 0, 0, targetWidth, targetHeight);
-      resolve(canvas.toDataURL('image/jpeg', 0.92));
+      if (normalizedRotation) {
+        context.translate(canvas.width / 2, canvas.height / 2);
+        context.rotate((normalizedRotation * Math.PI) / 180);
+        context.drawImage(image, -targetWidth / 2, -targetHeight / 2, targetWidth, targetHeight);
+      } else {
+        context.drawImage(image, 0, 0, targetWidth, targetHeight);
+      }
+
+      try {
+        resolve(canvas.toDataURL('image/jpeg', 0.92));
+      } catch {
+        reject(new Error('Could not read the photo. Try choosing it again.'));
+      }
     };
+    image.onerror = () => reject(new Error('Could not load the photo for rotation. Try choosing it again.'));
+    if (!dataUrl.startsWith('data:image')) {
+      image.crossOrigin = 'anonymous';
+    }
     image.src = dataUrl;
   });
+
+  const rotatePhoto = (degrees) => {
+    setPhotoRotation((currentRotation) => (currentRotation + degrees + 360) % 360);
+  };
 
   const handleLogin = async () => {
     if (!isSupabaseConfigured) {
@@ -597,12 +626,12 @@ function App() {
       return;
     }
 
-    let photoToSave = form.photo;
-    if (form.photo && form.photo.startsWith('data:image')) {
-      photoToSave = await compressPhoto(form.photo);
-    }
-
     try {
+      let photoToSave = form.photo;
+      if (form.photo && (form.photo.startsWith('data:image') || photoRotation)) {
+        photoToSave = await compressPhoto(form.photo, photoRotation);
+      }
+
       const payload = await saveProduct({
         form: {
           ...form,
@@ -1030,11 +1059,22 @@ function App() {
                       {form.photo ? 'Retake Photo' : 'Take Photo'}
                     </Button>
                     {form.photo && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <img src={form.photo} alt="Preview" onClick={() => openImageViewer(form.photo, `${form.name || 'Product'} preview`)} style={{ width: 198, height: 198, objectFit: 'cover', borderRadius: 12, border: '1.5px solid #f97316', cursor: 'zoom-in' }} />
-                        <Button size="small" color="error" onClick={() => setForm((currentForm) => ({ ...currentForm, photo: '', photoPath: '' }))} sx={{ borderRadius: 999 }}>
-                          Remove
-                        </Button>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <img src={form.photo} alt="Preview" onClick={() => openImageViewer(form.photo, `${form.name || 'Product'} preview`, { rotation: photoRotation })} style={{ width: 198, height: 198, objectFit: 'cover', transform: `rotate(${photoRotation}deg)`, borderRadius: 12, border: '1.5px solid #f97316', cursor: 'zoom-in' }} />
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <IconButton aria-label="Rotate photo left" title="Rotate photo left" onClick={() => rotatePhoto(-90)} sx={{ color: '#f8f4eb' }}>
+                            <RotateLeftIcon />
+                          </IconButton>
+                          <IconButton aria-label="Rotate photo right" title="Rotate photo right" onClick={() => rotatePhoto(90)} sx={{ color: '#f8f4eb' }}>
+                            <RotateRightIcon />
+                          </IconButton>
+                          <Button size="small" color="error" onClick={() => {
+                            setForm((currentForm) => ({ ...currentForm, photo: '', photoPath: '' }));
+                            setPhotoRotation(0);
+                          }} sx={{ borderRadius: 999 }}>
+                            Remove
+                          </Button>
+                        </Box>
                       </Box>
                     )}
                   </Box>
@@ -1125,7 +1165,7 @@ function App() {
                             <Typography sx={{ color: '#f8f4eb', fontSize: { xs: 15, sm: 17 }, fontWeight: 700, lineHeight: 1.1, wordBreak: 'break-word', mb: 1, maxWidth: '100%' }}>
                               {product.barcode || '-'}
                             </Typography>
-                            <BarcodePreview value={product.barcode} onZoom={(src, alt) => openImageViewer(src, alt)} />
+                            <BarcodePreview value={product.barcode} onZoom={(src, alt, options) => openImageViewer(src, alt, options)} />
                           </Box>
                         </Box>
 
@@ -1298,12 +1338,12 @@ function App() {
               </DialogActions>
             </Dialog>
 
-            <Dialog open={imageViewer.open} onClose={() => setImageViewer({ open: false, src: '', alt: '' })} fullScreen={isMobile} maxWidth="lg" PaperProps={{ sx: { background: '#050505', color: '#f8f4eb', borderRadius: isMobile ? 0 : 4 } }}>
+            <Dialog open={imageViewer.open} onClose={() => setImageViewer({ open: false, src: '', alt: '', isBarcode: false, rotation: 0 })} fullScreen={isMobile} maxWidth="lg" PaperProps={{ sx: { background: '#050505', color: '#f8f4eb', borderRadius: isMobile ? 0 : 4 } }}>
               <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
                 <Typography variant="h6" sx={{ color: '#f8f4eb' }}>
                   {imageViewer.alt}
                 </Typography>
-                <Button onClick={() => setImageViewer({ open: false, src: '', alt: '' })} sx={{ color: '#cabfae' }}>
+                <Button onClick={() => setImageViewer({ open: false, src: '', alt: '', isBarcode: false, rotation: 0 })} sx={{ color: '#cabfae' }}>
                   Close
                 </Button>
               </DialogTitle>
@@ -1318,9 +1358,11 @@ function App() {
                       maxWidth: 'min(96vw, 1200px)',
                       maxHeight: '78vh',
                       objectFit: 'contain',
-                      borderRadius: 3,
-                      border: '1px solid rgba(244,228,195,0.14)',
-                      boxShadow: '0 24px 60px rgba(0,0,0,0.45)',
+                      transform: `rotate(${imageViewer.rotation}deg)`,
+                      borderRadius: imageViewer.isBarcode ? 0 : 3,
+                      background: imageViewer.isBarcode ? '#ffffff' : 'transparent',
+                      border: imageViewer.isBarcode ? 'none' : '1px solid rgba(244,228,195,0.14)',
+                      boxShadow: imageViewer.isBarcode ? 'none' : '0 24px 60px rgba(0,0,0,0.45)',
                     }}
                   />
                 )}
