@@ -206,6 +206,7 @@ function App() {
   const isMobile = useMediaQuery('(max-width:600px)');
   const crestSrc = `${import.meta.env.BASE_URL}rj-crest.png`;
   const photoInputRef = useRef(null);
+  const bootstrapPromiseRef = useRef(null);
   const supabaseConfigError = getSupabaseConfigError();
   const supportsLiveScanner = typeof window !== 'undefined'
     && typeof navigator !== 'undefined'
@@ -302,32 +303,47 @@ function App() {
       return;
     }
 
+    if (bootstrapPromiseRef.current) {
+      return bootstrapPromiseRef.current;
+    }
+
     if (!silent) {
       setSyncing(true);
     }
 
+    const bootstrapPromise = (async () => {
+      try {
+        const payload = await bootstrapAppData();
+        setSession(payload.session);
+        applyBootstrapData(payload.data);
+
+        if (!payload.session) {
+          setActivities([]);
+        }
+      } catch (error) {
+        clearAppData();
+
+        if (!silent) {
+          setSnackbar({
+            open: true,
+            message: error.message || 'Could not connect to Supabase.',
+            severity: 'error',
+          });
+        }
+      } finally {
+        setAuthBooting(false);
+        if (!silent) {
+          setSyncing(false);
+        }
+      }
+    })();
+    bootstrapPromiseRef.current = bootstrapPromise;
+
     try {
-      const payload = await bootstrapAppData();
-      setSession(payload.session);
-      applyBootstrapData(payload.data);
-
-      if (!payload.session) {
-        setActivities([]);
-      }
-    } catch (error) {
-      clearAppData();
-
-      if (!silent) {
-        setSnackbar({
-          open: true,
-          message: error.message || 'Could not connect to Supabase.',
-          severity: 'error',
-        });
-      }
+      await bootstrapPromise;
     } finally {
-      setAuthBooting(false);
-      if (!silent) {
-        setSyncing(false);
+      if (bootstrapPromiseRef.current === bootstrapPromise) {
+        bootstrapPromiseRef.current = null;
       }
     }
   };
@@ -372,7 +388,9 @@ function App() {
         return;
       }
 
-      void loadBootstrapEvent({ silent: true });
+      window.setTimeout(() => {
+        void loadBootstrapEvent({ silent: true });
+      }, 0);
     });
 
     return () => {
