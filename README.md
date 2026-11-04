@@ -83,11 +83,34 @@ npm run start
 
 Then open `http://localhost:4000`.
 
-## Hosting
+## Install as a PWA
 
-This repo still includes [render.yaml](render.yaml). It now builds the frontend, injects the `VITE_*` variables at build time, and uses the lightweight Node server to serve the generated `dist/` directory.
+The app is configured as an installable Progressive Web App. On a supported phone or desktop browser, open the deployed HTTPS site and use the browser's **Install app** or **Add to Home Screen** option.
 
-You can also host the built frontend on any static host that supports build-time environment variables.
+The service worker caches the built app shell and static assets for faster startup and basic offline loading. Supabase authentication and data still require a network connection; user data and API responses are not cached offline.
+
+## Deploy on Vercel
+
+Import this GitHub repository into Vercel. Vercel detects Vite automatically; use:
+
+- Build command: `npm run build`
+- Output directory: `dist`
+- Install command: `npm ci`
+
+Set these environment variables for the Vercel deployment:
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PRODUCT_BUCKET=product-photos`
+- `VITE_SUPABASE_ADMIN_OPERATORS_FUNCTION=admin-operators`
+
+Set the variables for Production (and Preview if you want preview deployments to connect to Supabase), then redeploy. Do not put a Supabase service-role or secret key in Vercel frontend variables. Add the deployed Vercel domain to the Supabase Auth site's allowed URL and redirect URL settings.
+
+The included [vercel.json](vercel.json) provides SPA route fallback and avoids stale service-worker and manifest responses. The service worker only precaches static build assets.
+
+## Other hosting
+
+The app can still be hosted on Render or another static host that supports build-time `VITE_*` environment variables. The [render.yaml](render.yaml) configuration is retained for existing Render deployments.
 
 ## Supabase notes
 
